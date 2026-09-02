@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package uniflow;
+
+enum ChunkType {
+    DATA = 0;
+    PARITY = 1;
+}
+
+
+message FileMetadata {
+    string file_id = 1;          
+    string file_name = 2;           
+    uint64 file_size = 3;           
+    uint32 total_data_chunks = 4;  
+    uint32 total_parity_chunks = 5; 
+    string sha256_hash = 6;         
+}
+
+message FileChunk {
+    string file_id = 1;          
+    uint32 chunk_id = 2;            
+    ChunkType chunk_type = 3;       
+    bytes payload = 4;              
+}
+
+message PacketMessage {
+    oneof payload {
+        FileMetadata metadata = 1;
+        FileChunk chunk = 2;
+    }
+}
