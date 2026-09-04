@@ -1,12 +1,14 @@
-#include "crc.hpp"
+#include "../include/crc.hpp"
 #include <array>
+#include <cstddef>
+#include <cstdint>
 
 namespace uniflow {
 
 const uint32_t* CRC32::get_lookup_table() {
     static const auto table = []() {
         std::array<uint32_t, 256> table{};
-        
+
         for (uint32_t i = 0; i < 256; ++i) {
             uint32_t crc = i;
             for (uint32_t j = 0; j < 8; ++j) {
@@ -20,7 +22,7 @@ const uint32_t* CRC32::get_lookup_table() {
         }
         return table;
     }();
-
+    
     return table.data();
 }
 
