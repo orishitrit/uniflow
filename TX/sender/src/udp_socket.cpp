@@ -55,7 +55,7 @@ bool UDPSocket::is_valid() const {
     return socket_fd >= 0;
 }
 
-ssize_t UDPSocket::send(const uint32_t* data, size_t length) {
+ssize_t UDPSocket::send(const uint8_t* data, size_t length) {
     if(!is_valid() || data == nullptr || length == 0) {
         std::cerr << "Socket is not valid" << std::endl;
         return -1;
@@ -69,7 +69,7 @@ ssize_t UDPSocket::send(const uint32_t* data, size_t length) {
     return bytes_sent;
 }
 
-ssize_t UDPSocket::send(const std::vector<uint32_t>& buffer) {
+ssize_t UDPSocket::send(const std::vector<uint8_t>& buffer) {
     return send(buffer.data(), buffer.size());
 }
 

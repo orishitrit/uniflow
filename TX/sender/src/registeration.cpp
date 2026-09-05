@@ -97,6 +97,7 @@ bool RegistrationClient::register_worker(uint32_t worker_id, uint16_t udp_port) 
         return false;
     }
 
+    // dev 1 will parse it with msg.decode().split(':')
     std::string reg_msg = "REGISTER:" + std::to_string(worker_id) + ":" + std::to_string(udp_port);
     
     uint32_t msg_size = htonl(static_cast<uint32_t>(reg_msg.size()));
