@@ -1,0 +1,4 @@
+RX/session_manager/
+/run_system.sh
+.venv/
+/unit_testing/
