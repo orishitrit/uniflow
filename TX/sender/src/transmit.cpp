@@ -63,7 +63,7 @@ void TransmitNode::run_loop(){
         const uint8_t* crc_bytes = reinterpret_cast<const uint8_t*>(&checksum_net);
         packet.insert(packet.end(), crc_bytes, crc_bytes + sizeof(checksum_net));
 
-        // הוספת גוף ההודעה
+        //add data
         packet.insert(packet.end(), protobuf_data.begin(), protobuf_data.end());
 
         //Send the packet over UDP to the router
