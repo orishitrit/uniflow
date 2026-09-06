@@ -43,16 +43,20 @@ void TransmitNode::run_loop(){
     std::vector<uint8_t> protobuf_data;
 
     while (is_running) {
+        std::cout << "[DEBUG] Waiting for UDS message from Master...\n";
         if (!reg_client.receive_message(protobuf_data)) { //Get chunk from dev 1 with UDS
             std::cout << "[TransmitNode] UDS connection closed or error. Stopping loop...\n";
             break;
         }
+
+        std::cout << "[DEBUG] Successfully received " << protobuf_data.size() << " bytes from UDS!\n";
 
         if (protobuf_data.empty()) {
             continue;
         }
 
         uint32_t checksum = CRC32::calculate(protobuf_data); //CRC Calculation
+        std::cout << "[DEBUG] Calculated CRC32: 0x" << std::hex << checksum << std::dec << "\n";
 
         //build the complete packet for sending [4 bytes CRC32] + [Protobuf Data]
         std::vector<uint8_t> packet;
@@ -66,11 +70,15 @@ void TransmitNode::run_loop(){
         //add data
         packet.insert(packet.end(), protobuf_data.begin(), protobuf_data.end());
 
+        std::cout << "[DEBUG] Sending UDP packet (Total size: " << packet.size() << " bytes)...\n";
+
         //Send the packet over UDP to the router
         ssize_t bytes_sent = udp_socket.send(packet);
         if (bytes_sent < 0) {
             std::cerr << "[TransmitNode Warning] Failed to send UDP packet\n";
         }
+
+        std::cout << "[DEBUG] UDP Send Result: " << bytes_sent << " bytes sent successfully!\n";
     }
 
     std::cout << "[TransmitNode] Transmission loop finished.\n";
