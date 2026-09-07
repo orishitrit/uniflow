@@ -7,17 +7,17 @@
 #include <string>
 
 namespace uniflow {
-class UDPServer {
+class UDPListener {
 public:
-    explicit UDPServer(uint16_t listener_port);
+    explicit UDPListener(uint16_t listener_port);
 
-    ~UDPServer();
+    ~UDPListener();
 
-    UDPServer(const UDPServer&) = delete;
-    UDPServer& operator=(const UDPServer&) = delete;
+    UDPListener(const UDPListener&) = delete;
+    UDPListener& operator=(const UDPListener&) = delete;
 
-    UDPServer(UDPServer&& other) noexcept;
-    UDPServer& operator=(UDPServer&& other) noexcept;
+    UDPListener(UDPListener&& other) noexcept;
+    UDPListener& operator=(UDPListener&& other) noexcept;
 
     bool is_valid();
 

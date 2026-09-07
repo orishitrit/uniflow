@@ -7,7 +7,7 @@
 #include <utility>
 
 namespace uniflow {
-UDPServer::UDPServer(uint16_t listener_port) : port(listener_port) {
+UDPListener::UDPListener(uint16_t listener_port) : port(listener_port) {
     socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (socket_fd < 0) {
         std::cerr << "Failed to create socket" << std::endl;
@@ -28,16 +28,16 @@ UDPServer::UDPServer(uint16_t listener_port) : port(listener_port) {
     }
 }
 
-UDPServer::~UDPServer() {
+UDPListener::~UDPListener() {
     close_socket();
 }
 
-UDPServer::UDPServer(UDPServer&& other) noexcept
+UDPListener::UDPListener(UDPListener&& other) noexcept
     : socket_fd(other.socket_fd), port(other.port), server_addr(other.server_addr) {
     other.socket_fd = -1;
 }
 
-UDPServer& UDPServer::operator=(UDPServer&& other) noexcept {
+UDPListener& UDPListener::operator=(UDPListener&& other) noexcept {
     if (this != &other) {
         close_socket();
         socket_fd = other.socket_fd;
@@ -48,18 +48,18 @@ UDPServer& UDPServer::operator=(UDPServer&& other) noexcept {
     return *this;
 }
 
-void UDPServer::close_socket() {
+void UDPListener::close_socket() {
     if(is_valid()) {
         close(socket_fd);
         socket_fd = -1;
     }
 }
 
-bool UDPServer::is_valid() {
+bool UDPListener::is_valid() {
     return socket_fd >= 0;
 }
 
-ssize_t UDPServer::receive(std::vector<uint8_t>& packet_buffer, size_t max_buffer_size) {
+ssize_t UDPListener::receive(std::vector<uint8_t>& packet_buffer, size_t max_buffer_size) {
     if(!is_valid()) {
         std::cerr << "Socket is invalid" << std::endl;
         return -1;
