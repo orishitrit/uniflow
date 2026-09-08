@@ -24,7 +24,8 @@ bool ReceiverNode::init() {
     std::cout << "[ReceiveNode] Successfully initialized Worker ID: " << worker_id 
               << " | Listening Port: " << listen_port << std::endl;
 
-  return true;
+    run_loop();
+    return true;
 }
 
 
@@ -74,7 +75,7 @@ void ReceiverNode::run_loop(){
             continue;
         }
     }
-    
+
     std::cout << "[ReceiveNode] RX Processing loop stopped." << std::endl;
 }
 
