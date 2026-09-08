@@ -1,2 +1,7 @@
+RX/session_manager/
+/run_system.sh
 .venv/
 /unit_testing/
+
+RX/receiver/build
+TX/sender/build
