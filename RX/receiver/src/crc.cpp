@@ -1,6 +1,7 @@
 #include "../include/crc.hpp"
 
 #include <array>
+#include <cstddef>
 namespace uniflow {
 constexpr std::array<uint32_t, 256> generate_crc32_table() {
     std::array<uint32_t, 256> table{};
