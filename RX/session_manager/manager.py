@@ -25,11 +25,22 @@ class SessionManager:
         self.pending_timestamps: Dict[str, float] = {}
 
         self.completed_files: Set[str] = set()
+        self.connected_workers: Set[str] = set()
         os.makedirs(self.output_dir, exist_ok=True)
 
     def on_frame_received(self, raw_bytes: bytes) -> None:
+        if raw_bytes.startswith(b"RX_WORKER:"):
+            worker_id_str = raw_bytes.decode("utf-8", errors="ignore")
+            self.connected_workers.add(worker_id_str)
+            print(f"[SessionManager] Worker connected: {worker_id_str}")
+            return
+
         packet = pb.PacketMessage()
-        packet.ParseFromString(raw_bytes)
+        try:
+            packet.ParseFromString(raw_bytes)
+        except Exception:
+            return
+
         payload_type = packet.WhichOneof("payload")
 
         if payload_type == "metadata":
