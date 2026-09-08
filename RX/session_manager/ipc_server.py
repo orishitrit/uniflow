@@ -9,6 +9,7 @@ class IPCServer:
     def __init__(self, socket_paths: List[str]):
         self.selector = selectors.DefaultSelector()
         self.socket_paths = socket_paths
+        self.listening_sockets: List[socket.socket] = []
         self.buffers: Dict[int, bytearray] = {}
         self.observers: List[Callable[[bytes], None]] = []
         self.tick_callback: Optional[Callable[[], None]] = None
@@ -21,6 +22,7 @@ class IPCServer:
             server_sock.listen()
             server_sock.setblocking(False)
             self.selector.register(server_sock, selectors.EVENT_READ, self._accept)
+            self.listening_sockets.append(server_sock)
 
     def register_observer(self, callback: Callable[[bytes], None]) -> None:
         self.observers.append(callback)
@@ -72,6 +74,27 @@ class IPCServer:
         except OSError:
             pass
 
+    def close_all(self) -> None:
+        for sock in self.listening_sockets:
+            try:
+                self.selector.unregister(sock)
+            except (KeyError, ValueError):
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+        self.listening_sockets.clear()
+
+        for path in self.socket_paths:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+        self.selector.close()
+
     def start(self) -> None:
         try:
             while True:
@@ -83,4 +106,4 @@ class IPCServer:
                 if self.tick_callback:
                     self.tick_callback()
         finally:
-            self.selector.close()
+            self.close_all()
