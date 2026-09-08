@@ -8,13 +8,13 @@ def chunk_id_gen():
         yield id
         id += 1
 
-def chunk_file(file_path, chunk_id, chunk_size = 1024):
+def chunk_file(file_path, chunk_id_generator, chunk_size = 1024):
     with open(file_path, "rb") as f:
         while True:
             chunk = f.read(chunk_size)
             if not chunk:
                 break
-            yield chunk_builder(chunk, 1, next(chunk_id))
+            yield chunk_builder(chunk, 1, next(chunk_id_generator))
     #להוסיף לוגיקת יתירות
 
 def chunk_builder(chunk, chunk_type, chunk_id):
@@ -45,12 +45,14 @@ def hash_file(file_path):
 
 
 def file_chunking(file_path):
-    meta_data = metadata_chunk_builder(file_path, chunk_id_gen())
-    send(meta_data)
+    chunk_id_generator = chunk_id_gen()
+    meta_data = metadata_chunk_builder(file_path)
+    yield meta_data
 
-    for chunk in chunk_file(file_path, chunk_id_gen()):
+    for chunk in chunk_file(file_path, chunk_id_generator):
         processed_chunk = chunk_builder(chunk, chunk_type="data")
         processed_chunk.file_id = meta_data.file_id
-        send(processed_chunk)
+        yield processed_chunk
+
     print(f"File chunking completed for: {file_path.name}")
 
