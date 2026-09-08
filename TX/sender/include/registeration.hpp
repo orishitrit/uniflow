@@ -8,6 +8,7 @@
 
 namespace uniflow {
 
+constexpr size_t CHUNK_SIZE = 1400;
 class RegistrationClient {
 public:
     RegistrationClient(const std::string& socket_path);

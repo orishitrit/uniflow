@@ -110,20 +110,14 @@ bool RegistrationClient::register_worker(uint32_t worker_id, uint16_t udp_port) 
 }
 
 bool RegistrationClient::receive_message(std::vector<uint8_t>& buffer) {
-    if (!is_connected()) {
+    buffer.resize(CHUNK_SIZE);
+
+    if (!read_exact(buffer.data(), CHUNK_SIZE)) {
+        buffer.clear();
         return false;
     }
 
-    uint32_t msg_length_net = 0;
-    if (!read_exact(reinterpret_cast<uint8_t*>(&msg_length_net), sizeof(msg_length_net))) {
-        return false;
-    }
-
-    uint32_t msg_length = ntohl(msg_length_net);
-
-    buffer.resize(msg_length);
-
-    return read_exact(buffer.data(), msg_length);
+    return true;
 }
 
 }
