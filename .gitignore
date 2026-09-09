@@ -1,0 +1,5 @@
+.venv/
+/unit_testing/
+
+RX/receiver/build
+TX/sender/build

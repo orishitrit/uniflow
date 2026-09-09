@@ -1,6 +1,7 @@
 import asyncio
-from TX.file_monitor.chunker import file_chunking
+import TX.file_monitor.chunker as chunker
 import itertools
+import struct
 
 class ChunkDispatcher:
     def __init__(self):
@@ -23,12 +24,21 @@ class ChunkDispatcher:
 
     def setWorkerReady(self, worker):
         self.ready_workers.put_nowait(worker)
-        print(f"Worker {worker} is ready.")
+        print(f"Worker {worker} registered successfully.")
         if not self.busy_workers:
             self.all_ready.set()
 
+        print("\nHELLO")
+        print(list(self.ready_workers._queue))
+        print("HELLOO")
+        
+
     async def dispatch_chunk(self, chunk, worker):
-        worker.write(chunk.SerializeToString())
+        payload = chunk.SerializeToString()
+        # אריזת 4 בייטים של אורך ב-Big Endian (כמו htonl)
+        header = struct.pack('>I', len(payload))
+    
+        worker.write(header + payload)
         if hasattr(worker, 'drain'):
             await worker.drain()
 
@@ -47,7 +57,7 @@ class ChunkDispatcher:
             worker_cycle = itertools.cycle(list(self.busy_workers))
             
             try:
-                for chunk in file_chunking(file_path):
+                for chunk in chunker.file_chunking(file_path):
                     while self.busy_workers:
                         current_worker = next(worker_cycle)
 
@@ -75,15 +85,25 @@ class ChunkDispatcher:
 
                 self.open_gates.set()
 
-        else:                
+        else:
+            print("Dispatching file without drain.")
+            print("\nHELLO1")
+            print(list(self.ready_workers._queue))
+            print("HELLO2")
             worker = await self.ready_workers.get()
+            print("found worker.")
 
             self.all_ready.clear()
             self.busy_workers.add(worker)
 
-            try:            
-                for chunk in file_chunking(file_path):
+            try:
+                print("chunkkking file...")
+                print(file_path.stat().st_size)         
+                for chunk in chunker.file_chunking(file_path):
+                    print("Dispatching chunk to worker.\n")
+                    print(chunk)
                     await self.dispatch_chunk(chunk, worker)
+                    print("done it!")
 
                 self.busy_workers.remove(worker)
                 self.ready_workers.put_nowait(worker)
