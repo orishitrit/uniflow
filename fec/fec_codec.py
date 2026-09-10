@@ -15,43 +15,31 @@ def calculate_total_parity_chunks(
 def create_single_parity_chunk(
     chunks_data: List[bytes],
     file_id: str,
-    parity_index: int,
-    total_data_chunks: int,
-    total_parity_chunks: int,
+    chunk_id: int,
 ) -> pb.FileChunk:
-  k = total_data_chunks
-  m = total_parity_chunks
+    k = len(chunks_data)
+    if k <= 0:
+        raise ValueError("chunks_data cannot be empty.")
+    if k + 1 > 256:
+        raise ValueError(f"Block size ({k}) exceeds zfec limit.")
 
-  if k <= 0 or m <= 0:
-    raise ValueError("k and m must be positive integers.")
+    # ריפוד כל הצ'אנקים לאותו אורך בדיוק
+    max_len = max(len(c) for c in chunks_data)
+    padded_chunks = [c.ljust(max_len, b"\x00") for c in chunks_data]
 
-  if k + m > 256:
-    raise ValueError(f"Total chunks (k + m = {k + m}) exceeds zfec limit of 256")
+    # k בלוקי מידע -> סה"כ k + 1 בלוקים (כלומר בדיוק בלוק יתירות אחד נוסף)
+    encoder = zfec.Encoder(k, k + 1)
 
-  if not (0 <= parity_index < m):
-    raise IndexError(
-        f"parity_index {parity_index} out of range (0 <= idx < {m})"
-    )
+    # מקבלים רשימה עם איבר אחד בלבד [0]
+    parity_payload = encoder.encode(padded_chunks)[0]
 
-  if len(chunks_data) != k:
-    raise ValueError(f"Expected {k} data chunks, received {len(chunks_data)}")
+    parity_chunk = pb.FileChunk()
+    parity_chunk.file_id = str(file_id)
+    parity_chunk.chunk_id = chunk_id
+    parity_chunk.chunk_type = pb.ChunkType.PARITY
+    parity_chunk.payload = parity_payload
 
-  max_len = max(len(c) for c in chunks_data)
-  padded_chunks = [c.ljust(max_len, b"\x00") for c in chunks_data]
-
-  encoder = zfec.Encoder(k, k + m)
-  global_chunk_id = k + parity_index
-
-  encoded_blocks = encoder.encode(padded_chunks)
-  parity_payload = encoded_blocks[global_chunk_id]
-
-  parity_chunk = pb.FileChunk()
-  parity_chunk.file_id = file_id
-  parity_chunk.chunk_id = global_chunk_id
-  parity_chunk.chunk_type = pb.ChunkType.PARITY
-  parity_chunk.payload = parity_payload
-
-  return parity_chunk
+    return parity_chunk
 
 
 def decode_chunks(

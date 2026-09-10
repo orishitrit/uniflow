@@ -110,9 +110,20 @@ bool RegistrationClient::register_worker(uint32_t worker_id, uint16_t udp_port) 
 }
 
 bool RegistrationClient::receive_message(std::vector<uint8_t>& buffer) {
-    buffer.resize(CHUNK_SIZE);
+    uint32_t msg_size_net = 0;
 
-    if (!read_exact(buffer.data(), CHUNK_SIZE)) {
+    // קריאת 4 בייטים של אורך ההודעה
+    if (!read_exact(reinterpret_cast<uint8_t*>(&msg_size_net), sizeof(msg_size_net))) {
+        return false;
+    }
+
+    uint32_t msg_size = ntohl(msg_size_net);
+
+    //התאמת גודל ה-buffer לגודל המדויק שנשלח מפייתון
+    buffer.resize(msg_size);
+
+    // קריאת ההודעה עצמה
+    if (!read_exact(buffer.data(), msg_size)) {
         buffer.clear();
         return false;
     }
