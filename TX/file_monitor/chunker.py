@@ -1,6 +1,7 @@
 from Schemas import chunk_pb2
 import hashlib
 from pathlib import Path
+import math
 from fec.fec_codec import calculate_total_parity_chunks, create_single_parity_chunk
 
 def chunk_id_gen():
@@ -11,7 +12,11 @@ def chunk_id_gen():
 
 
 def chunk_file(file_path, chunk_id_generator, metadata_chunk, chunk_size=1024):
-    parity_block_size = metadata_chunk.total_data_chunks // metadata_chunk.total_parity_chunks
+    if metadata_chunk.total_parity_chunks > 0:
+        parity_block_size = metadata_chunk.total_data_chunks // metadata_chunk.total_parity_chunks
+    else:
+        parity_block_size = 0
+
     parity_block = []
 
     with open(file_path, "rb") as f:
@@ -21,13 +26,23 @@ def chunk_file(file_path, chunk_id_generator, metadata_chunk, chunk_size=1024):
             if not chunk:
                 break
 
-            if(parity_block.__sizeof__ == parity_block_size):
+            yield chunk_builder(chunk, chunk_pb2.DATA, next(chunk_id_generator), metadata_chunk.file_id)
+
+            parity_block.append(chunk)
+            
+
+            if(len(parity_block) == parity_block_size):
                 yield create_single_parity_chunk(parity_block, metadata_chunk.file_id, next(chunk_id_generator))
                 parity_block = []
-
+                
             
-            yield chunk_builder(chunk, chunk_pb2.DATA, next(chunk_id_generator), metadata_chunk.file_id)
-    # להוסיף לוגיקת יתירות
+            
+        if len(parity_block) > 0:
+            yield create_single_parity_chunk(
+               parity_block,
+               metadata_chunk.file_id,
+               next(chunk_id_generator),
+            )    
 
 
 def chunk_builder(chunk, chunk_type, chunk_id, file_id):
@@ -55,10 +70,11 @@ def metadata_chunk_builder(file_path):
     file_hash = hash_file(file_path)
     metadata_chunk.sha256_hash = file_hash  
     metadata_chunk.file_id = file_hash[:8]
-    metadata_chunk.total_data_chunks = (metadata_chunk.file_size // 1024) + 1
-    metadata_chunk.total_parity_chunks(metadata_chunk.total_data_chunks)
+    metadata_chunk.total_data_chunks = math.ceil(metadata_chunk.file_size / 1024)
+    metadata_chunk.total_parity_chunks = calculate_total_parity_chunks(metadata_chunk.total_data_chunks)
 
     return metadata_chunk
+
 
 
 def file_chunking(file_path):

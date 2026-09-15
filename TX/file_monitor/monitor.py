@@ -17,11 +17,11 @@ class FileEventHandler(FileSystemEventHandler):
         self.loop = loop
         self.dispatcher = dispatcher
 
-    def on_created(self, event):
+    def on_closed(self, event):
         if event.is_directory:
             return
 
-        print(f"File created: {event.src_path}")
+        print(f"File write finished and closed: {event.src_path}")
         asyncio.run_coroutine_threadsafe(
             self.handle_file(Path(event.src_path)),
             self.loop
@@ -35,16 +35,21 @@ class FileEventHandler(FileSystemEventHandler):
         except OSError:
             return
 
+        # התעלמות מקבצים ריקים לחלוטין
+        if file_size == 0:
+            print(f"File {file_path} is empty (0 bytes), skipping.")
+            return
+
         if file_size > TEN_MB:
-            print(f"File {file_path} exceeds 10MB, chunking...")
-            self.dispatcher.drain()
+            print(f"File {file_path} exceeds 10MB ({file_size} bytes), chunking with drain...")
+            self.dispatcher.close()
 
             try:
                 await self.dispatcher.dispatch_file(file_path)
             finally:
                 file_path.unlink(missing_ok=True)
         else:
-            print(f"File {file_path} is under 10MB, dispatching directly...")
+            print(f"File {file_path} is under 10MB ({file_size} bytes), dispatching directly...")
             await self.dispatcher.dispatch_file(file_path)
 
 
@@ -52,7 +57,7 @@ async def start_monitoring(path_to_watch: Path, chunkDispatcher: ChunkDispatcher
     loop = asyncio.get_running_loop()
     event_handler = FileEventHandler(loop, chunkDispatcher)
     observer = Observer()
-    observer.schedule(event_handler, path=str(path_to_watch), recursive=True)
+    observer.schedule(event_handler, path=str(path_to_watch), recursive=False)
     observer.start()
 
     print(f"Monitoring started on: {path_to_watch}")
