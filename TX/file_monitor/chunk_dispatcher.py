@@ -2,6 +2,7 @@ import asyncio
 import TX.file_monitor.chunker as chunker
 import itertools
 import struct
+import Schemas.chunk_pb2 as pb
 
 class ChunkDispatcher:
     def __init__(self):
@@ -28,14 +29,16 @@ class ChunkDispatcher:
         if not self.busy_workers:
             self.all_ready.set()
 
-        print("\nHELLO")
-        print(list(self.ready_workers._queue))
-        print("HELLOO")
-        
-
     async def dispatch_chunk(self, chunk, worker):
-        payload = chunk.SerializeToString()
-        # אריזת 4 בייטים של אורך ב-Big Endian (כמו htonl)
+        packet = pb.PacketMessage()
+        if isinstance(chunk, pb.FileMetadata):
+            packet.metadata.CopyFrom(chunk)
+        elif isinstance(chunk, pb.FileChunk):
+            packet.chunk.CopyFrom(chunk)
+        else:
+            raise TypeError(f"Unsupported chunk type: {type(chunk)}")
+
+        payload = packet.SerializeToString()
         header = struct.pack('>I', len(payload))
     
         worker.write(header + payload)
@@ -53,27 +56,23 @@ class ChunkDispatcher:
                 self.busy_workers.add(worker)
 
             self.all_ready.clear()
-
             worker_cycle = itertools.cycle(list(self.busy_workers))
             
             try:
                 for chunk in chunker.file_chunking(file_path):
                     while self.busy_workers:
                         current_worker = next(worker_cycle)
-
                         try:
                             await self.dispatch_chunk(chunk, current_worker)
                             break
-
                         except (ConnectionResetError, BrokenPipeError):
-                                    print("Worker disconnected during dispatch. Dropping it.")
-                                    self.busy_workers.remove(current_worker)
-                                    current_worker.close()
-
-                                    if self.busy_workers:
-                                        worker_cycle = itertools.cycle(list(self.busy_workers))
-                                    else:
-                                        raise RuntimeError("All workers disconnected during drain.")
+                            print("Worker disconnected during dispatch. Dropping it.")
+                            self.busy_workers.remove(current_worker)
+                            current_worker.close()
+                            if self.busy_workers:
+                                worker_cycle = itertools.cycle(list(self.busy_workers))
+                            else:
+                                raise RuntimeError("All workers disconnected during drain.")
 
             finally:
                 while self.busy_workers:
@@ -87,9 +86,6 @@ class ChunkDispatcher:
 
         else:
             print("Dispatching file without drain.")
-            print("\nHELLO1")
-            print(list(self.ready_workers._queue))
-            print("HELLO2")
             worker = await self.ready_workers.get()
             print("found worker.")
 
@@ -114,7 +110,5 @@ class ChunkDispatcher:
                 worker.close()
 
             finally:
-                if(not self.busy_workers and not self.ready_workers.empty()):
+                if not self.busy_workers and not self.ready_workers.empty():
                     self.all_ready.set()
-
-    

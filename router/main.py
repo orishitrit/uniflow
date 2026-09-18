@@ -27,7 +27,7 @@ def parse_args() -> RouterConfig:
     parser.add_argument(
         "--target-host",
         type=str,
-        default="127.0.0.1",
+        default="172.17.106.81",
         help="Destination host IP for receivers",
     )
     args = parser.parse_args()

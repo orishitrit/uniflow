@@ -1,0 +1,9 @@
+.venv
+venv
+__pycache__
+*.pyc
+.git
+**/build
+**/__pycache__
+**/.pytest_cache
+*.sock

@@ -15,7 +15,11 @@ class FileReceiver:
         self.file_handle = open(self.output_path, "wb+")
 
         k = self.metadata.total_data_chunks
-        self.chunk_size: int = math.ceil(self.metadata.file_size / k)
+        if k == 0 or self.metadata.file_size == 0:
+            self.chunk_size = 0
+        else:
+            self.chunk_size = math.ceil(self.metadata.file_size / k)
+
         self.received_data_indices: Set[int] = set()
         self.parity_chunks: Dict[int, bytes] = {}
 
@@ -27,6 +31,9 @@ class FileReceiver:
                 pass
 
     def add_chunk(self, chunk: pb.FileChunk) -> None:
+        if self.chunk_size == 0:
+            return
+
         if len(chunk.payload) != self.chunk_size:
             return
 
@@ -38,11 +45,14 @@ class FileReceiver:
             offset = chunk.chunk_id * self.chunk_size
             self.file_handle.seek(offset)
             self.file_handle.write(chunk.payload)
+            self.file_handle.flush()
         else:
             self.parity_chunks[chunk.chunk_id] = chunk.payload
 
     def is_complete_or_recoverable(self) -> bool:
         k = self.metadata.total_data_chunks
+        if k == 0 or self.metadata.file_size == 0:
+            return True
         return len(self.received_data_indices) + len(self.parity_chunks) >= k
 
     def finalize(self) -> bool:
@@ -54,7 +64,7 @@ class FileReceiver:
             return False
 
         try:
-            if len(self.received_data_indices) < k:
+            if k > 0 and len(self.received_data_indices) < k:
                 self._recover_missing_data(k, m)
 
             self.file_handle.truncate(self.metadata.file_size)
@@ -73,34 +83,30 @@ class FileReceiver:
         chunks_for_decoding: List[bytes] = []
         indices_for_decoding: List[int] = []
 
-        for chunk_id in self.received_data_indices:
+        for chunk_id in sorted(self.received_data_indices):
             if len(indices_for_decoding) == k:
                 break
             offset = chunk_id * self.chunk_size
             self.file_handle.seek(offset)
             data = self.file_handle.read(self.chunk_size)
-
-            if len(data) < self.chunk_size:
-                data = data.ljust(self.chunk_size, b"\x00")
-
             chunks_for_decoding.append(data)
             indices_for_decoding.append(chunk_id)
 
-        for chunk_id, parity_data in self.parity_chunks.items():
+        for chunk_id in sorted(self.parity_chunks.keys()):
             if len(indices_for_decoding) == k:
                 break
-            chunks_for_decoding.append(parity_data)
+            chunks_for_decoding.append(self.parity_chunks[chunk_id])
             indices_for_decoding.append(chunk_id)
 
+        missing_indices = [idx for idx in range(k) if idx not in self.received_data_indices]
         recovered_blocks = decoder.decode(chunks_for_decoding, indices_for_decoding)
 
-        for chunk_id in range(k):
-            if chunk_id not in self.received_data_indices:
-                missing_data = recovered_blocks[chunk_id]
-                offset = chunk_id * self.chunk_size
-                self.file_handle.seek(offset)
-                self.file_handle.write(missing_data)
-                self.received_data_indices.add(chunk_id)
+        for missing_idx, data in zip(missing_indices, recovered_blocks):
+            offset = missing_idx * self.chunk_size
+            self.file_handle.seek(offset)
+            self.file_handle.write(data)
+            self.received_data_indices.add(missing_idx)
+        self.file_handle.flush()
 
     def _verify_hash(self) -> bool:
         self.file_handle.seek(0)
