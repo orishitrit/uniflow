@@ -1,7 +1,7 @@
 import socket, zlib, struct, time
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-target = ('127.0.0.1', 8001)
+target = ('10.241.160.218', 9001)
 
 # 1. שליחת פקטה תקינה (Good Packet)
 payload1 = b'Hello Uniflow RX Node!'

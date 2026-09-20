@@ -32,7 +32,7 @@ conn.sendall(header + payload)
 
 # 3. נותנים ל-Sender זמן לעבד ולשדר ב-UDP לפני שמנתקים
 print("[Master] Payload sent! Keeping UDS open...")
-time.sleep(10)
+time.sleep(20)
 
 conn.close()
 server.close()
