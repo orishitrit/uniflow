@@ -40,10 +40,13 @@ class ChunkDispatcher:
 
         payload = packet.SerializeToString()
         header = struct.pack('>I', len(payload))
-    
+
         worker.write(header + payload)
         if hasattr(worker, 'drain'):
             await worker.drain()
+
+        # השהיה קלה של 100 מיקרו-שניות לשחרור ה-Loop ומניעת הצפת תורים ברשת
+        await asyncio.sleep(0.003)
 
     async def dispatch_file(self, file_path):
         if not self.open_gates.is_set():

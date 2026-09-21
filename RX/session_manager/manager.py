@@ -12,8 +12,8 @@ class SessionManager:
     def __init__(
         self,
         output_dir: str,
-        timeout_seconds: float = 10.0,
-        max_pending_per_file: int = 200,
+        timeout_seconds: float = 40.0,
+        max_pending_per_file: int = 30000,
     ):
         self.output_dir = output_dir
         self.timeout_seconds = timeout_seconds
@@ -53,8 +53,8 @@ class SessionManager:
                 return
 
             print(
-                f"[SessionManager] New file session started: {file_id} | Total"
-                f" chunks expected: {meta.total_data_chunks}"
+                f"[SessionManager] New file session started: {file_id} | "
+                f"Total chunks expected: {meta.total_data_chunks} | Size: {meta.file_size} bytes"
             )
             receiver = FileReceiver(meta, self.output_dir)
             self.active_sessions[file_id] = receiver
@@ -64,13 +64,12 @@ class SessionManager:
                 self.pending_timestamps.pop(file_id, None)
                 buffered = self.pending_chunks.pop(file_id)
                 print(
-                    f"[SessionManager] Replaying {len(buffered)} buffered chunks for"
-                    f" {file_id}"
+                    f"[SessionManager] Replaying {len(buffered)} buffered chunks for {file_id}"
                 )
                 for buffered_chunk in buffered:
                     receiver.add_chunk(buffered_chunk)
 
-            if receiver.is_complete_or_recoverable():
+            if receiver.is_complete():
                 self._finalize_and_close(file_id, receiver)
 
         elif payload_type == "chunk":
@@ -82,10 +81,6 @@ class SessionManager:
 
             if file_id not in self.active_sessions:
                 if len(self.pending_chunks[file_id]) < self.max_pending_per_file:
-                    print(
-                        f"[SessionManager] Buffering out-of-order chunk"
-                        f" {chunk.chunk_id} for file {file_id}"
-                    )
                     self.pending_chunks[file_id].append(chunk)
                     self.pending_timestamps[file_id] = time.time()
                 return
@@ -93,12 +88,14 @@ class SessionManager:
             receiver = self.active_sessions[file_id]
             self.session_timestamps[file_id] = time.time()
             receiver.add_chunk(chunk)
-            print(
-                f"[SessionManager] Received chunk {chunk.chunk_id} for file"
-                f" {file_id}"
-            )
 
-            if receiver.is_complete_or_recoverable():
+            count = len(receiver.data_chunks)
+            total = receiver.metadata.total_data_chunks
+
+            if count % 1000 == 0 or count == total:
+                print(f"[SessionManager Progress] File {file_id}: {count}/{total} unique data chunks received")
+
+            if receiver.is_complete():
                 self._finalize_and_close(file_id, receiver)
 
     def _finalize_and_close(self, file_id: str, receiver: FileReceiver) -> None:
@@ -109,8 +106,8 @@ class SessionManager:
         if success:
             self.completed_files.add(file_id)
             print(
-                f"[SessionManager SUCCESS] File {file_id} successfully reconstructed"
-                f" and saved to {self.output_dir}!"
+                f"[SessionManager SUCCESS] File {file_id} successfully reconstructed "
+                f"and saved to {self.output_dir}!"
             )
         else:
             print(f"[SessionManager Error] Failed to finalize file {file_id}")
@@ -128,7 +125,8 @@ class SessionManager:
             self.session_timestamps.pop(fid, None)
             if receiver:
                 print(
-                    f"[SessionManager Warning] Session {fid} timed out and cleaned up."
+                    f"[SessionManager Warning] Session {fid} timed out and cleaned up. "
+                    f"Received: {len(receiver.data_chunks)}/{receiver.metadata.total_data_chunks} unique chunks."
                 )
                 receiver._cleanup(success=False)
 

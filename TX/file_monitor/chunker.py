@@ -35,8 +35,6 @@ def chunk_file(file_path, chunk_id_generator, metadata_chunk, chunk_size=1024):
                 yield create_single_parity_chunk(parity_block, metadata_chunk.file_id, next(chunk_id_generator))
                 parity_block = []
                 
-            
-            
         if len(parity_block) > 0:
             yield create_single_parity_chunk(
                parity_block,

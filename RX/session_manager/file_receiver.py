@@ -1,10 +1,9 @@
 import hashlib
-import math
 import os
-from typing import Dict, List, Set
+import traceback
+from typing import Dict, Set
 
 import Schemas.chunk_pb2 as pb
-import zfec
 
 
 class FileReceiver:
@@ -12,123 +11,86 @@ class FileReceiver:
         self.metadata = metadata
         self.output_dir = output_dir
         self.output_path = os.path.join(output_dir, metadata.file_name)
-        self.file_handle = open(self.output_path, "wb+")
 
-        k = self.metadata.total_data_chunks
-        if k == 0 or self.metadata.file_size == 0:
-            self.chunk_size = 0
-        else:
-            self.chunk_size = math.ceil(self.metadata.file_size / k)
-
-        self.received_data_indices: Set[int] = set()
+        self.data_chunks: Dict[int, bytes] = {}
         self.parity_chunks: Dict[int, bytes] = {}
 
-    def __del__(self):
-        if hasattr(self, "file_handle") and self.file_handle:
-            try:
-                self.file_handle.close()
-            except Exception:
-                pass
-
     def add_chunk(self, chunk: pb.FileChunk) -> None:
-        if self.chunk_size == 0:
-            return
-
-        if len(chunk.payload) != self.chunk_size:
-            return
-
         if chunk.chunk_type == pb.ChunkType.DATA:
-            if chunk.chunk_id in self.received_data_indices:
-                return
-
-            self.received_data_indices.add(chunk.chunk_id)
-            offset = chunk.chunk_id * self.chunk_size
-            self.file_handle.seek(offset)
-            self.file_handle.write(chunk.payload)
-            self.file_handle.flush()
+            if chunk.chunk_id not in self.data_chunks:
+                self.data_chunks[chunk.chunk_id] = chunk.payload
         else:
-            self.parity_chunks[chunk.chunk_id] = chunk.payload
+            if chunk.chunk_id not in self.parity_chunks:
+                self.parity_chunks[chunk.chunk_id] = chunk.payload
 
-    def is_complete_or_recoverable(self) -> bool:
+    def is_complete(self) -> bool:
+        """מחזיר True ברגע שהצטברו k מקטעי Data. מתעלם מחורים באינדקסים."""
         k = self.metadata.total_data_chunks
-        if k == 0 or self.metadata.file_size == 0:
+        if self.metadata.file_size == 0:
             return True
-        return len(self.received_data_indices) + len(self.parity_chunks) >= k
+        if k == 0:
+            return False
+        # התיקון: בדיקת כמות בלבד, ללא בדיקת רציפות מספרית
+        return len(self.data_chunks) >= k
 
     def finalize(self) -> bool:
         k = self.metadata.total_data_chunks
-        m = self.metadata.total_parity_chunks
 
-        if not self.is_complete_or_recoverable():
+        if not self.is_complete():
+            print(f"[FileReceiver] Finalize failed: Only {len(self.data_chunks)}/{k} chunks received.")
             self._cleanup(success=False)
             return False
 
         try:
-            if k > 0 and len(self.received_data_indices) < k:
-                self._recover_missing_data(k, m)
+            print(f"[FileReceiver] Assembling {k} chunks sequentially (ignoring Parity ID gaps)...")
+            hasher = hashlib.sha256()
 
-            self.file_handle.truncate(self.metadata.file_size)
-            self.file_handle.flush()
+            with open(self.output_path, "wb") as f:
+                bytes_written = 0
+                target_size = self.metadata.file_size
 
-            is_valid = self._verify_hash()
+                # התיקון הקריטי: מיון המזהים שהתקבלו בפועל וכתיבתם ברצף
+                sorted_data_ids = sorted(self.data_chunks.keys())
+
+                # לוקחים בדיוק k מקטעי Data ראשונים וכותבים אותם
+                for chunk_id in sorted_data_ids[:k]:
+                    payload = self.data_chunks[chunk_id]
+                    
+                    remaining = target_size - bytes_written
+                    if remaining <= 0:
+                        break
+
+                    # חיתוך ה-payload האחרון אם יש בו ריפוד (padding)
+                    chunk_to_write = payload[:remaining] if len(payload) > remaining else payload
+                    
+                    f.write(chunk_to_write)
+                    hasher.update(chunk_to_write)
+                    bytes_written += len(chunk_to_write)
+
+                f.flush()
+
+            calculated = hasher.hexdigest().lower()
+            expected = self.metadata.sha256_hash.lower()
+
+            print(f"[FileReceiver Hash] Calculated: {calculated}")
+            print(f"[FileReceiver Hash] Expected:   {expected}")
+
+            is_valid = (calculated == expected)
+            if not is_valid:
+                print(f"[FileReceiver Error] Hash mismatch! Verification failed.")
+
             self._cleanup(success=is_valid)
             return is_valid
 
-        except Exception:
+        except Exception as e:
+            print(f"[FileReceiver Error] Exception during finalize: {e}")
+            traceback.print_exc()
             self._cleanup(success=False)
             return False
 
-    def _recover_missing_data(self, k: int, m: int) -> None:
-        decoder = zfec.Decoder(k, k + m)
-        chunks_for_decoding: List[bytes] = []
-        indices_for_decoding: List[int] = []
-
-        for chunk_id in sorted(self.received_data_indices):
-            if len(indices_for_decoding) == k:
-                break
-            offset = chunk_id * self.chunk_size
-            self.file_handle.seek(offset)
-            data = self.file_handle.read(self.chunk_size)
-            chunks_for_decoding.append(data)
-            indices_for_decoding.append(chunk_id)
-
-        for chunk_id in sorted(self.parity_chunks.keys()):
-            if len(indices_for_decoding) == k:
-                break
-            chunks_for_decoding.append(self.parity_chunks[chunk_id])
-            indices_for_decoding.append(chunk_id)
-
-        missing_indices = [idx for idx in range(k) if idx not in self.received_data_indices]
-        recovered_blocks = decoder.decode(chunks_for_decoding, indices_for_decoding)
-
-        for missing_idx, data in zip(missing_indices, recovered_blocks):
-            offset = missing_idx * self.chunk_size
-            self.file_handle.seek(offset)
-            self.file_handle.write(data)
-            self.received_data_indices.add(missing_idx)
-        self.file_handle.flush()
-
-    def _verify_hash(self) -> bool:
-        self.file_handle.seek(0)
-        hasher = hashlib.sha256()
-
-        while chunk := self.file_handle.read(65536):
-            hasher.update(chunk)
-
-        calculated = hasher.hexdigest().lower()
-        expected = self.metadata.sha256_hash.lower()
-        return calculated == expected
-
     def _cleanup(self, success: bool) -> None:
-        if self.file_handle:
-            try:
-                self.file_handle.close()
-            except Exception:
-                pass
-            self.file_handle = None
-
+        self.data_chunks.clear()
         self.parity_chunks.clear()
-        self.received_data_indices.clear()
 
         if not success and os.path.exists(self.output_path):
             try:
