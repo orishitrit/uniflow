@@ -13,8 +13,15 @@ for i in {1..30}; do
     sleep 0.2
 done
 
-# 2. הרמת ה-Sender עם 4 הארגומנטים: <worker_id> <dest_ip> <udp_port> <uds_path>
-./sender_bin 1 172.20.0.20 8001 /tmp/file_monitor.sock &
-CPP_PID=$!
+# 2. הרמת 3 תהליכי Sender עבור 3 הערוצים (Worker IDs 1, 2, 3)
+# ארגומנטים: <worker_id> <dest_ip> <udp_port> <uds_path>
+PIDS=()
 
-wait -n $PYTHON_PID $CPP_PID
+for i in {1..3}; do
+    PORT=$((8000 + i)) # יפיק 8001, 8002, 8003
+    ./sender_bin $i 172.20.0.20 $PORT /tmp/file_monitor.sock &
+    PIDS+=($!)
+done
+
+# המתנה לסיום של תהליך הפייתון או של אחד ה-Senders
+wait -n $PYTHON_PID "${PIDS[@]}"

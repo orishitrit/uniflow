@@ -7,8 +7,15 @@ PYTHON_PID=$!
 
 sleep 1
 
-# 2. הרמת ה-Receiver עם 3 הארגומנטים: <worker_id> <listen_port> <uds_path>
-./receiver_bin 1 9001 /tmp/uniflow_rx_master.sock &
-CPP_PID=$!
+# 2. הרמת 3 תהליכי Receiver עבור 3 הערוצים (Worker IDs 1, 2, 3)
+# ארגומנטים: <worker_id> <listen_port> <uds_path>
+PIDS=()
 
-wait -n $PYTHON_PID $CPP_PID
+for i in {1..3}; do
+    PORT=$((9000 + i)) # יפיק 9001, 9002, 9003
+    ./receiver_bin $i $PORT /tmp/uniflow_rx_master.sock &
+    PIDS+=($!)
+done
+
+# המתנה לסיום של תהליך הפייתון או של אחד ה-Receivers
+wait -n $PYTHON_PID "${PIDS[@]}"
